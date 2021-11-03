@@ -2,12 +2,15 @@ import {
     FillQuoteTransformerLimitOrderInfo,
     FillQuoteTransformerOrderType,
     FillQuoteTransformerRfqOrderInfo,
+    LimitOrderFields,
+    RfqOrderFields,
+    Signature,
 } from '@0x/protocol-utils';
-import { V4RFQIndicativeQuote } from '@0x/quote-server';
 import { MarketOperation } from '@0x/types';
 import { BigNumber } from '@0x/utils';
 
-import { NativeOrderWithFillableAmounts, RfqFirmQuoteValidator, RfqRequestOpts } from '../../types';
+import { Address, Bytes, RfqFirmQuoteValidator, RfqRequestOpts } from '../../types';
+import { NativeOrderWithFillableAmounts } from '../native_orders';
 import { QuoteRequestor } from '../../utils/quote_requestor';
 import { PriceComparisonsReport, QuoteReport } from '../quote_report_generator';
 
@@ -163,122 +166,58 @@ export interface BalancerV2PoolInfo {
     vault: string;
 }
 
-// Internal `fillData` field for `Fill` objects.
-export interface FillData {}
-
-// `FillData` for native fills. Represents a single native order
-export type NativeRfqOrderFillData = FillQuoteTransformerRfqOrderInfo;
-export type NativeLimitOrderFillData = FillQuoteTransformerLimitOrderInfo;
-export type NativeFillData = NativeRfqOrderFillData | NativeLimitOrderFillData;
-
 // Represents an individual DEX sample from the sampler contract
-export interface DexSample<TFillData extends FillData = FillData> {
+export interface DexSample {
     source: ERC20BridgeSource;
-    fillData: TFillData;
+    encodedFillData: Bytes;
+    metadata?: any;
     input: BigNumber;
     output: BigNumber;
-}
-export interface CurveFillData extends FillData {
-    fromTokenIdx: number;
-    toTokenIdx: number;
-    pool: CurveInfo;
-}
-
-export interface BalancerFillData extends FillData {
-    poolAddress: string;
-}
-
-export interface BalancerV2FillData extends FillData {
-    vault: string;
-    poolId: string;
-}
-
-export interface UniswapV2FillData extends FillData {
-    tokenAddressPath: string[];
-    router: string;
-}
-
-export interface ShellFillData extends FillData {
-    poolAddress: string;
-}
-
-export interface LiquidityProviderFillData extends FillData {
-    poolAddress: string;
     gasCost: number;
 }
 
-export interface BancorFillData extends FillData {
-    path: string[];
-    networkAddress: string;
+export interface BridgeFillData {
+    encodedFillData: Bytes;
 }
 
-export interface KyberFillData extends FillData {
-    hint: string;
-    reserveId: string;
-    networkProxy: string;
+export interface UniswapV2FillData extends BridgeFillData {
+    tokenAddressPath: Address[];
 }
 
-export interface MooniswapFillData extends FillData {
-    poolAddress: string;
+export interface UniswapV3FillData extends BridgeFillData {
+    encodedPath: Bytes;
 }
 
-export interface DODOFillData extends FillData {
-    poolAddress: string;
-    isSellBase: boolean;
-    helperAddress: string;
+export interface LiquidityProviderFillData extends BridgeFillData {
+    poolAddress: Address;
 }
 
-export interface GenericRouterFillData extends FillData {
-    router: string;
+export interface CurveFillData extends BridgeFillData {
+    poolAddress: Address;
+    exchangeFunctionSelector: Bytes;
+    fromTokenIdx: number;
+    toTokenIdx: number;
 }
 
-export interface MultiHopFillData extends FillData {
-    firstHopSource: SourceQuoteOperation;
-    secondHopSource: SourceQuoteOperation;
-    intermediateToken: string;
+export interface MooniswapFillData extends BridgeFillData {
+    poolAddress: Address;
 }
 
-export interface MakerPsmExtendedData {
-    isSellOperation: boolean;
-    takerToken: string;
-}
-
-export type MakerPsmFillData = FillData & MakerPsmExtendedData & PsmInfo;
-
-export interface HopInfo {
-    sourceIndex: BigNumber;
-    returnData: string;
-}
-
-export interface UniswapV3FillData extends FillData {
-    tokenAddressPath: string[];
-    router: string;
-    pathAmounts: Array<{ uniswapPath: string; inputAmount: BigNumber }>;
-}
-
-export interface KyberDmmFillData extends UniswapV2FillData {
-    poolsPath: string[];
-}
-
-export interface FinalUniswapV3FillData extends Omit<UniswapV3FillData, 'uniswapPaths'> {
-    // The uniswap-encoded path that can fll the maximum input amount.
-    uniswapPath: string;
-}
-
-export interface LidoFillData extends FillData {
-    stEthTokenAddress: string;
-    takerToken: string;
+export interface NativeOrderFillData {
+    order: LimitOrderFields | RfqOrderFields;
+    signature: Signature;
+    fillableTakerAmount: BigNumber;
 }
 
 /**
  * Represents a node on a fill path.
  */
-export interface Fill<TFillData extends FillData = FillData> {
+export interface Fill {
     // basic data for every fill
     source: ERC20BridgeSource;
     // TODO jacob people seem to agree  that orderType here is more readable
     type: FillQuoteTransformerOrderType; // should correspond with TFillData
-    fillData: TFillData;
+    data?: any;
     // Unique ID of the original source path this fill belongs to.
     // This is generated when the path is generated and is useful to distinguish
     // paths that have the same `source` IDs but are distinct (e.g., Curves).
@@ -295,15 +234,37 @@ export interface Fill<TFillData extends FillData = FillData> {
     parent?: Fill;
     // The index of the fill in the original path.
     index: number;
+    // Cumulative gas cost associated with swapping against this source/pool.
+    gasCost: number;
+}
+
+export interface BridgeFill<TData extends BridgeFillData> extends Fill {
+    data: TData;
+}
+
+export interface GenericBridgeFill extends BridgeFill<BridgeFillData> {}
+
+export interface  UniswapV2BridgeFill extends BridgeFill<UniswapV2FillData> {}
+
+export interface  UniswapV3BridgeFill extends BridgeFill<UniswapV3FillData> {}
+
+export interface  LiquidityProviderBridgeFill extends BridgeFill<LiquidityProviderFillData> {}
+
+export interface  CurveBridgeFill extends BridgeFill<CurveFillData> {}
+
+export interface  MooniswapBridgeFill extends BridgeFill<MooniswapFillData> {}
+
+export interface NativeOrderFill extends Fill {
+    data: NativeOrderFillData;
 }
 
 /**
  * Represents continguous fills on a path that have been merged together.
  */
-export interface CollapsedFill<TFillData extends FillData = FillData> {
+export interface CollapsedFill {
     source: ERC20BridgeSource;
     type: FillQuoteTransformerOrderType; // should correspond with TFillData
-    fillData: TFillData;
+    data?: any;
     // Unique ID of the original source path this fill belongs to.
     // This is generated when the path is generated and is useful to distinguish
     // paths that have the same `source` IDs but are distinct (e.g., Curves).
@@ -323,56 +284,70 @@ export interface CollapsedFill<TFillData extends FillData = FillData> {
         input: BigNumber;
         output: BigNumber;
     }>;
+    gasCost: number;
+    isFallback: boolean;
 }
 
-/**
- * A `CollapsedFill` wrapping a native order.
- */
-export interface NativeCollapsedFill extends CollapsedFill<NativeFillData> {}
+export interface CollapsedBridgeFill<TData extends BridgeFillData> extends CollapsedFill {
+    data: TData;
+}
 
-export interface OptimizedMarketOrderBase<TFillData extends FillData = FillData> {
+export interface CollapsedGenericBridgeFill extends CollapsedBridgeFill<BridgeFillData> {}
+
+export interface CollapsedUniswapV2BridgeFill extends CollapsedBridgeFill<UniswapV2FillData> {}
+
+export interface CollapsedUniswapV3BridgeFill extends CollapsedBridgeFill<UniswapV3FillData> {}
+
+export interface CollapsedLiquidityProviderBridgeFill extends CollapsedBridgeFill<LiquidityProviderFillData> {}
+
+export interface CollapsedCurveBridgeFill extends CollapsedBridgeFill<CurveFillData> {}
+
+export interface CollapsedMooniswapBridgeFill extends CollapsedBridgeFill<MooniswapFillData> {}
+
+export interface CollapsedNativeOrderFill extends CollapsedFill {
+    data: NativeOrderFillData;
+}
+
+export interface OptimizedOrder {
     source: ERC20BridgeSource;
-    fillData: TFillData;
-    type: FillQuoteTransformerOrderType; // should correspond with TFillData
-    makerToken: string;
-    takerToken: string;
-    makerAmount: BigNumber; // The amount we wish to buy from this order, e.g inclusive of any previous partial fill
-    takerAmount: BigNumber; // The amount we wish to fill this for, e.g inclusive of any previous partial fill
+    type: FillQuoteTransformerOrderType;
+    inputToken: string;
+    outputToken: string;
+    gasCost: number;
+    inputAmount: BigNumber;
+    outputAmount: BigNumber;
     fills: CollapsedFill[];
+    isFallback: boolean;
+    fillData: any;
 }
 
-export interface OptimizedMarketBridgeOrder<TFillData extends FillData = FillData>
-    extends OptimizedMarketOrderBase<TFillData> {
+export interface OptimizedBridgeOrder<TFillData extends BridgeFillData> extends OptimizedOrder {
     type: FillQuoteTransformerOrderType.Bridge;
-    fillData: TFillData;
     sourcePathId: string;
+    fillData: TFillData;
 }
 
-export interface OptimizedLimitOrder extends OptimizedMarketOrderBase<NativeLimitOrderFillData> {
+export interface OptimizedGenericBridgeOrder extends OptimizedBridgeOrder<BridgeFillData> {}
+
+export interface OptimizedUniswapV2BridgeOrder extends OptimizedBridgeOrder<UniswapV2FillData> {}
+
+export interface OptimizedNativeOrder extends OptimizedOrder {
+    fillData: Omit<NativeOrderFillData, 'type'>;
+}
+
+export interface OptimizedLimitOrder extends OptimizedNativeOrder {
     type: FillQuoteTransformerOrderType.Limit;
-    fillData: NativeLimitOrderFillData;
 }
 
-export interface OptimizedRfqOrder extends OptimizedMarketOrderBase<NativeRfqOrderFillData> {
+export interface OptimizedRfqOrder extends OptimizedNativeOrder {
     type: FillQuoteTransformerOrderType.Rfq;
-    fillData: NativeRfqOrderFillData;
 }
-
-/**
- * Optimized orders to fill.
- */
-export type OptimizedMarketOrder =
-    | OptimizedMarketBridgeOrder<FillData>
-    | OptimizedMarketOrderBase<NativeLimitOrderFillData>
-    | OptimizedMarketOrderBase<NativeRfqOrderFillData>;
 
 export interface GetMarketOrdersRfqOpts extends RfqRequestOpts {
     quoteRequestor?: QuoteRequestor;
     firmQuoteValidator?: RfqFirmQuoteValidator;
 }
 
-export type FeeEstimate = (fillData: FillData) => number | BigNumber;
-export type FeeSchedule = Partial<{ [key in ERC20BridgeSource]: FeeEstimate }>;
 export type ExchangeProxyOverhead = (sourceFlags: bigint) => BigNumber;
 
 /**
@@ -413,26 +388,6 @@ export interface GetMarketOrdersOpts {
      * percentage, no fallback quote will be provided.
      */
     maxFallbackSlippage: number;
-    /**
-     * Number of samples to take for each DEX quote.
-     */
-    numSamples: number;
-    /**
-     * The exponential sampling distribution base.
-     * A value of 1 will result in evenly spaced samples.
-     * > 1 will result in more samples at lower sizes.
-     * < 1 will result in more samples at higher sizes.
-     * Default: 1.25.
-     */
-    sampleDistributionBase: number;
-    /**
-     * Fees for each liquidity source, expressed in gas.
-     */
-    feeSchedule: FeeSchedule;
-    /**
-     * Estimated gas consumed by each liquidity source.
-     */
-    gasSchedule: FeeSchedule;
     exchangeProxyOverhead: ExchangeProxyOverhead;
     /**
      * Whether to pad the quote with a redundant fallback quote using different
@@ -473,17 +428,20 @@ export interface BatchedOperation<TResult> {
     handleRevert(callResults: string): TResult;
 }
 
-export interface SourceQuoteOperation<TFillData extends FillData = FillData> extends BatchedOperation<BigNumber[]> {
-    readonly source: ERC20BridgeSource;
-    fillData: TFillData;
+export interface OptimizedHop {
+    inputToken: Address;
+    outputToken: Address;
+    inputAmount: BigNumber;
+    outputAmount: BigNumber;
+    sourceFlags: bigint;
+    orders: OptimizedOrder[];
+    adjustedCompleteRate: BigNumber;
 }
 
 export interface OptimizerResult {
-    optimizedOrders: OptimizedMarketOrder[];
-    sourceFlags: bigint;
-    liquidityDelivered: CollapsedFill[] | DexSample<MultiHopFillData>;
-    marketSideLiquidity: MarketSideLiquidity;
     adjustedRate: BigNumber;
+    hops: OptimizedHop[];
+    marketSideLiquidity: MarketSideLiquidity;
     unoptimizedPath?: CollapsedPath;
     takerAmountPerEth: BigNumber;
     makerAmountPerEth: BigNumber;
@@ -494,7 +452,7 @@ export interface OptimizerResultWithReport extends OptimizerResult {
     priceComparisonsReport?: PriceComparisonsReport;
 }
 
-export type MarketDepthSide = Array<Array<DexSample<FillData>>>;
+export type MarketDepthSide = Array<Array<DexSample>>;
 
 export interface MarketDepth {
     bids: MarketDepthSide;
@@ -503,25 +461,30 @@ export interface MarketDepth {
     takerTokenDecimals: number;
 }
 
+export interface TokenAmountPerEth {
+    [tokenAddress: string]: BigNumber;
+}
+
 export interface MarketSideLiquidity {
     side: MarketOperation;
     inputAmount: BigNumber;
     inputToken: string;
     outputToken: string;
-    outputAmountPerEth: BigNumber;
-    inputAmountPerEth: BigNumber;
+    tokenAmountPerEth: TokenAmountPerEth;
     quoteSourceFilters: SourceFilters;
     makerTokenDecimals: number;
     takerTokenDecimals: number;
-    quotes: RawQuotes;
+    quotes: RawHopQuotes[];
     isRfqSupported: boolean;
+    gasPrice: BigNumber;
 }
 
-export interface RawQuotes {
+export interface RawHopQuotes {
+    tokenPath: Address[];
+    inputToken: Address;
+    outputToken: Address;
     nativeOrders: NativeOrderWithFillableAmounts[];
-    rfqtIndicativeQuotes: V4RFQIndicativeQuote[];
-    twoHopQuotes: Array<DexSample<MultiHopFillData>>;
-    dexQuotes: Array<Array<DexSample<FillData>>>;
+    dexQuotes: DexSample[][];
 }
 
 export interface TokenAdjacencyGraph {
@@ -541,7 +504,6 @@ export interface GenerateOptimizedOrdersOpts {
     bridgeSlippage?: number;
     maxFallbackSlippage?: number;
     excludedSources?: ERC20BridgeSource[];
-    feeSchedule: FeeSchedule;
     exchangeProxyOverhead?: ExchangeProxyOverhead;
     allowFallback?: boolean;
     shouldBatchBridgeOrders?: boolean;
